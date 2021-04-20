@@ -1,174 +1,170 @@
-function [out1,out2,out3] = multiOrientedCanny(im,sigma,thetas)
+function bnMap = multiscaleSobel(im,sigmas,trackingConfig)
 
-% Function Multioriented Canny
+% Function Multiscale edge detecion based on Sobel operators and the GSS
 %
-%  [ft,fx,fy] = multiOrientedCanny(image,sigma,thetas)
+%  bnMap = multiscaleSobel(im,sigmas)
+%  bnMap = multiscaleSobel(im,sigmas,maxDist)
+%  bnMap = multiscaleSobel(im,sigmas,[maxDist maxAngVar])
 %
-%   Performs the Canny convolution for fuzzy edge
-%   detection. That is, a first gaussian derivative
-%   based convolution on 2 dimensions for grayscale
-%   images. It does not smooth the image prior to the 
-%   convolution and it does not binarize or skeletizes
-%   the edges.
+%   This edge detection procedure is based on three different
+%		pillars [1]: 
+%		a) Gaussian scale space for multiscale image representation
+%		b) Sobel operators for gradient characterization
+%		c) Edge tracking for the configuration of the final boundary map.
 %
-%   Instead of using the decomposability of the Gaussian kernel, it
-%   considers different filters with orientations [0,pi[, keeping the one producing
-%   a signal with maximal magnitude.
+%   The procedure considers the scales in the Gaussian Scale-space 
+%		given by the parameter "sigmas". This generates a
+%		multiscale representation of the image. 
+%	At each scale, binary edges are computed by using Sobel masks,
+%		and further binarized using Non-Max Suppresion [2] and the double
+%		threshold determination in [3].
+%	In order to create a final boundary map the procedure performs 
+%		top-down tracking, where pixels are matched (if specified) up
+%		to a distance "maxDist" and angular variation "maxAngVar".
 %
-% [inputs]
-%   image(mandatory)- Image to be processed. Either in 
-%       [0,1] or [0,255] scales. If using the second scale, 
-%       data will be automatically converted to [0,1].
-%   sigma(optional, default=1.0)- Sigma parameter of the
-%       gaussian kernel. It must be a scalar.
-%   thetas(optional, default=[0:pi/8:pi-pi/8])-orientation of the filters
+%	This procedure embodies the proposal in [1].
+%
+% [Inputs]
+%
+%   image- Grayscale image, either in the interval [0,1] or
+%		in the scale {1,...,255}. In any case, both are
+%		normalized in the procedure. Color images are not accepted.
+%
+%   sigmas- Values of sigma in the projection into the GSS. The must be
+%		positive and increasing.
+%
+%   maxDisp (optional,default=sqrt(2))- Maximum displacement of an edge
+%       between two consecutive scales.
+%
+%	maxAngVar (optional, default= unused in the tracking process). 
+%		Maximum (radial) distance between the gradient at the edge pixel at 
+%		two consecutive scales. Analogously, maximum orientation difference between two
+%		matched pixels in two consecutive scales.
+%
+%	NOTE: If maxAngVar is not specified, only pixel distances are considered in the tracking,
+%		to the argument takes no default value.
+%
+%	NOTE (2): The argument maxAngVar cannot be specified if the maximum distance is 
+%		unspecified. 
 %
 % [outputs]
-%   ft- gradient magnitude
-%   fx- gradient horizontal component
-%   fy- gradient vertical component
-%       [They all have the same dimensions as the argument im]
+%	[bnMap]- Binary edge map.
 %
 % [usages]
-%   [ft] = multiOrientedCanny(image)
-%   [fx,fy] = multiOrientedCanny(image)
-%   [ft,fx,fy] = multiOrientedCanny(image)
-%   [ft] = multiOrientedCanny(image,sigma)
-%   [fx,fy] = multiOrientedCanny(image,sigma)
-%   [ft,fx,fy] = multiOrientedCanny(image,sigma)
-%   [ft] = multiOrientedCanny(image,sigma,thetas)
-%   [fx,fy] = multiOrientedCanny(image,sigma,thetas)
-%   [ft,fx,fy] = multiOrientedCanny(image,sigma,thetas)
+%	> [bnMap] = multiscaleSobel(image,[0.5 1 1.5 2 2.5 3])
 %
-% [see also]
+%
+% [dependencies]
+%   function gaussianSmooth
+%   function edgeTracking
+%   function doubleRosinUnimodalThr
+%   function floodHysteresis
 %   function directionalNMS
-%   function canny
+%	function sobel
+%	function components2orientations
 %
-% [References]
+% [author]
+%   Carlos Lopez-Molina (carlos.lopez@unavarra.es)
 %
-%	A computational approach to edge detection
-%	J. Canny
-%	IEEE Trans. on Patttern Analysis and Machine Intelligence, 8 (6), 1986
-%
+% [references]
+%	[1]
+%   Lopez-Molina, C; De Baets, B; Bustince, H; Sanz, J & Barrenechea, E
+%	Multiscale Edge Detection Based on Gaussian Smoothing and Edge Tracking
+%   Knowledge-Based Systems, 2013, 44, 101-111
+%	[2]
+%	Rosenfeld, A, Thurston, M
+%	Edge and Curve Detection for Visual Scene Anafysis
+%	IEEE Trans. on Computers, 1971, 20, 562-569
+%	[3]
+%   Liu, X.; Yu, Y.; Liu, B. & Li, Z.
+%   Bowstring-based dual-threshold computation method for adaptive Canny edge detector
+%   Proc. of the International Conf. of Image and Vision Computing New Zealand, 2013, 13-18
 %
 % [licensing]
 %
 %	This code is distributed under the GNU GPL license, 
 %		which is included at the end of this document.
-%	
+%
 
 % [versioning]
-%	2015/12	1.00 Initial version
-%   2016/01 1.01 The function now accepts multichannel images
-
+%	2016/04	1.00 Initial version
+%
 
 %
 %	0- Validate Arguments 
 %
-assert(nargin==1 || nargin==2 || nargin==3,'Error at multiOrientedCanny: Incorrect number of arguments');
 
-if (nargin==1)
-    sigma=1.0;%default sigma
-    thetas=[0:pi/8:pi-pi/8];
-elseif (nargin==2)
-    thetas=[0:pi/8:pi-pi/8];
-end
-
-%
-%	1- Preprocessing
-%
-
-% Transform to a double precision intensity image if necessary
-if ~isa(im,'double') && ~isa(im,'single') 
-  im = im2single(im);
-end
-
-if (max(max(im))>1.001)
-    im = im./255;
-end
-
-
-%
-%	2- Processing
-%
-
-%data on the filtering process
-
-% Individually for each channel!
-
-
-mcFX=zeros(size(im));
-mcFY=zeros(size(im));
-mcFT=zeros(size(im));
-
-for idxChannel=1:size(im,3)
-    
-    
-    %output of the filtering process
-    filtImages=zeros(size(im,1),size(im,2),length(thetas));
-    params.rho=1; %-> This function does not allow variable rho (so far)
-
-
-    for idTheta=1:length(thetas)
-        theta=thetas(idTheta);
-
-        params.theta=theta;
-
-        filter=-createGaussianFilter('1d',sigma,params);
-
-        filtImages(:,:,idTheta)=imfilter(im(:,:,idxChannel),filter,'replicate');
-
-    end
-
-    fx=zeros(size(im,1),size(im,2));
-    fy=zeros(size(im,1),size(im,2));
-    
-    if (nargout==1)
-        ft=max(abs(filtImages),[],3);
-    else
-
-        [~,pos]=max(abs(filtImages),[],3);
-
-
-        for idTheta=1:length(thetas)
-            theta=thetas(idTheta);
-            vals=filtImages(:,:,idTheta);
-            fx(pos==idTheta)=vals(pos==idTheta).*cos(theta);
-            fy(pos==idTheta)=vals(pos==idTheta).*sin(theta);
-
-        end
-
-        ft=sqrt(fx.^2+fy.^2);
-    end
-    
-    
-    %Saving in the main structures
-    mcFX(:,:,idxChannel)=fx;
-    mcFY(:,:,idxChannel)=fy;
-    mcFT(:,:,idxChannel)=ft;
-    
-    
-end
-
-%
-%	3- Output Processing
-%
-
-if (nargout==1)
-    out1=mcFT;
-elseif(nargout==2)
-    out1=mcFX;
-    out2=mcFY;
+assert(nargin==2 || nargin==3,'Error at multiscaleSobel.m>\t Wrong number of arguments.');
+assert(min(sigmas)>0,'Error at multiscaleSobel.m>\t Sigmas cant be negative.');
+assert(min(im(:))>=0,'Error at multiscaleSobel.m>\t The image should not contain pixel values below 0.');
+%default
+if (nargin==2)
+    maxDisp=sqrt(2);
+	maxAngVar=NaN;
 else
-    out1=mcFT;
-    out2=mcFX;
-    out3=mcFY;
+	if (length(trackingConfig)==1)
+		maxDist=trackingConfig(1);
+		maxAngVar=NaN;
+	else
+		maxDist=trackingConfig(1);
+		maxAngVar=trackingConfig(2);
+	end
 end
+
+%
+%   1- Preprocessing
+%
+if (max(im(:))>1.001)
+	im=double(im)./255;
+end
+
+bnMaps=zeros(size(im,1),size(im,2),length(sigmas));
+if (~isnan(maxAngVar))%No angles in the tracking
+	orientationMaps=zeros(size(im,1),size(im,2),length(sigmas));
+end
+
+%
+%   2- Processing
+%
+for idxScales=1:length(sigmas)   
+	
+	smooImg=gaussianSmooth(im,sigmas(idxScales));	
+	[fx,fy]=sobel(smooImg);
+	bnMaps(:,:,idxScales)=binarize(fx,fy);
+	
+	if (~isnan(maxAngVar)) 
+		orientationMaps(:,:,idxScales)=components2orientation(fx,fy);
+	end
+	
+end
+
+if (isnan(maxAngVar)) 
+	bnMap=edgeTracking(bnMaps(:,:,end:-1:1),maxDisp);
+else
+	bnMap=edgeTracking(bnMaps(:,:,end:-1:1),maxDisp,orientationMaps,maxAngVar);
+end
+
+
+
+end
+
+function bnImage=binarize(fx,fy)
+
+    %Normalize & stretch
+    ft=sqrt(fx.^2+fy.^2);
+    fx=fx./max(ft(:));
+    fy=fy./max(ft(:));
+    ft=ft./max(ft(:));
     
+    %Thin & binarize
+    thrss=doubleRosinUnimodalThr(ft,0.005);
+    thinMap=directionalNMS(fx,fy);
+    bnImage=floodHysteresis(thinMap.*ft,thrss(2),thrss(1));
+
+end
 
 
-
-    
+   
 % [license]
 %
 % GNU GENERAL PUBLIC LICENSE
@@ -845,3 +841,4 @@ end
 % the library.  If this is what you want to do, use the GNU Lesser General
 % Public License instead of this License.  But first, please read
 % <http://www.gnu.org/philosophy/why-not-lgpl.html>.
+

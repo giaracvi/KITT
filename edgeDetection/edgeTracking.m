@@ -1,55 +1,70 @@
-function [out1,out2,out3] = multiOrientedCanny(im,sigma,thetas)
+function finalMap = edgeTracking(binaryMaps,maxDisp,orientationMaps,maxDiv)
 
-% Function Multioriented Canny
+% Function Edge tracking
 %
-%  [ft,fx,fy] = multiOrientedCanny(image,sigma,thetas)
+%  [finalMap] = edgeTracking(binaryMaps)
+%  [finalMap] = edgeTracking(binaryMaps,maxDisp)
+%  [finalMap] = edgeTracking(binaryMaps,maxDisp,orientationMaps,maxDiv)
 %
-%   Performs the Canny convolution for fuzzy edge
-%   detection. That is, a first gaussian derivative
-%   based convolution on 2 dimensions for grayscale
-%   images. It does not smooth the image prior to the 
-%   convolution and it does not binarize or skeletizes
-%   the edges.
+%   Tracks edges across binary maps. More specifically, it selects the
+%       featured points at binaryMaps(:,:,1) and tracks them down to
+%       binaryMaps(:,:,end). The final position, i.e. the one they
+%		hold in the resulting "finalMap" is that they occupy at
+%       binaryMaps(:,:,end). 
 %
-%   Instead of using the decomposability of the Gaussian kernel, it
-%   considers different filters with orientations [0,pi[, keeping the one producing
-%   a signal with maximal magnitude.
+%	Each edge pixel at a given scale is tracked to the closest possible
+%		(and matcheable) edge pixel in the following scale. 
+%	
+%   Note that bifurcation is allowed and the maximum distance in 
+%		cross-scale matching is that
+%       introduced by the user. In order to understand why bifurcation is possible, please take
+%		a look at the principle of causality for the GSS,
+%		which states that any feature at a coarser scale is produced by a 
+%		not-necessarily unique feature at a finer scale. Although this procedure
+%		can be used in scale-spaces other than the GSS (or even in constructs
+%		other than scale-spaces!), we keep this from the original 
+%		formulation in [1].
 %
-% [inputs]
-%   image(mandatory)- Image to be processed. Either in 
-%       [0,1] or [0,255] scales. If using the second scale, 
-%       data will be automatically converted to [0,1].
-%   sigma(optional, default=1.0)- Sigma parameter of the
-%       gaussian kernel. It must be a scalar.
-%   thetas(optional, default=[0:pi/8:pi-pi/8])-orientation of the filters
+%	No edge can jump up a scale, i.e. there
+%       is no possibility for a tracked edge to miss a binaryMap. The only
+%		possibility for it to appear at the finalMap is to appear (or to be
+%		tracked throughout) each and every single binary map.
+%	
+%   Optionally, the user can include an sequence of orientation maps
+%		and a maximum angular variation in a tracked pixel. If so, 
+%		no edge will be successfully tracked if its appearance in 
+%		the upcoming scale includes a variation greater than maxDiv radians.
+%
+% [Inputs]
+%   binaryMaps(mandatory)- Binary edge maps.
+%   maxDisp(optional, default=sqrt(2))- Maximum (Euclidean) distance
+%       between the appearance of an edge at two consecutive scales.
+%		It can be any positive value.
+%   orientationMaps(optional, no default)- Orientation of the gradient at
+%       each pixel for each scale. It must contain the exact same dimensions
+%		of binaryMaps and contain values in [0,2*pi].
+%   maxDiv(optional, only used if orientationMap is provided, default=pi/2)- 
+%		Maximum (radial) distance between the gradient at the edge pixel at 
+%		two consecutive scales. Analogously, maximum orientation difference between two
+%		matched pixels in two consecutive scales.
 %
 % [outputs]
-%   ft- gradient magnitude
-%   fx- gradient horizontal component
-%   fy- gradient vertical component
-%       [They all have the same dimensions as the argument im]
+%   finalMap- Final edge map.
 %
 % [usages]
-%   [ft] = multiOrientedCanny(image)
-%   [fx,fy] = multiOrientedCanny(image)
-%   [ft,fx,fy] = multiOrientedCanny(image)
-%   [ft] = multiOrientedCanny(image,sigma)
-%   [fx,fy] = multiOrientedCanny(image,sigma)
-%   [ft,fx,fy] = multiOrientedCanny(image,sigma)
-%   [ft] = multiOrientedCanny(image,sigma,thetas)
-%   [fx,fy] = multiOrientedCanny(image,sigma,thetas)
-%   [ft,fx,fy] = multiOrientedCanny(image,sigma,thetas)
+%	It's complicated. Please see function multiscaleSobel for an illustrative
+%		example.
 %
-% [see also]
-%   function directionalNMS
-%   function canny
+% [dependencies]
 %
-% [References]
+% [author]
+%   Carlos Lopez-Molina (carlos.lopez@unavarra.es)
 %
-%	A computational approach to edge detection
-%	J. Canny
-%	IEEE Trans. on Patttern Analysis and Machine Intelligence, 8 (6), 1986
-%
+% [references]
+%	[1]
+%	Multiscale Edge Detection Based on Gaussian Smoothing and Edge Tracking
+%	Lopez-Molina, C.; De Baets, B.; Bustince, H.; Sanz, J. & Barrenechea,E.
+%	Knowledge-Based Systems, 2013, 44, 101-111
 %
 % [licensing]
 %
@@ -58,117 +73,113 @@ function [out1,out2,out3] = multiOrientedCanny(im,sigma,thetas)
 %	
 
 % [versioning]
-%	2015/12	1.00 Initial version
-%   2016/01 1.01 The function now accepts multichannel images
-
+%	2016/04	1.00 Initial version
+%
 
 %
 %	0- Validate Arguments 
 %
-assert(nargin==1 || nargin==2 || nargin==3,'Error at multiOrientedCanny: Incorrect number of arguments');
-
+assert(nargin==1 || nargin==2 || nargin==4,'Error at edgeTracking.m>\t Wrong number of arguments.');
+assert(maxDisp>=0,'Error at edgeTracking.m>\t The maxDisp must be positive.');
 if (nargin==1)
-    sigma=1.0;%default sigma
-    thetas=[0:pi/8:pi-pi/8];
+    maxDisp=sqrt(2);
+    mode='UNRT'; %unrestricted= not using angles
 elseif (nargin==2)
-    thetas=[0:pi/8:pi-pi/8];
+    mode='UNRT'; %unrestricted= not using angles
+else
+    assert(size(binaryMaps,3)==size(orientationMap,3),'Error at edgeTracking.m>\t The edge and orientation map contain different number of scales.');
+    assert(maxDiv>=0,'Error at edgeTracking.m>\t The maxDiv must be positive and greater than 0.');
+    mode='RSTR'; %restricted= using angles
 end
 
 %
 %	1- Preprocessing
 %
 
-% Transform to a double precision intensity image if necessary
-if ~isa(im,'double') && ~isa(im,'single') 
-  im = im2single(im);
-end
-
-if (max(max(im))>1.001)
-    im = im./255;
-end
-
-
 %
 %	2- Processing
 %
 
-%data on the filtering process
+if (strcmp(mode,'UNRT'))
 
-% Individually for each channel!
-
-
-mcFX=zeros(size(im));
-mcFY=zeros(size(im));
-mcFT=zeros(size(im));
-
-for idxChannel=1:size(im,3)
-    
-    
-    %output of the filtering process
-    filtImages=zeros(size(im,1),size(im,2),length(thetas));
-    params.rho=1; %-> This function does not allow variable rho (so far)
-
-
-    for idTheta=1:length(thetas)
-        theta=thetas(idTheta);
-
-        params.theta=theta;
-
-        filter=-createGaussianFilter('1d',sigma,params);
-
-        filtImages(:,:,idTheta)=imfilter(im(:,:,idxChannel),filter,'replicate');
+	current=binaryMaps(:,:,1);
+	
+	for idxNextScale=2:size(binaryMaps,3)
+	
+		next=zeros(size(bnImages,1),size(bnImages,2));
+		thisDist=0;
+		
+		while (sum(current(:))>0) && thisDist<maxDist)
+			strElm=createStructElement(thisDist);
+			% In next we accumulate the previous matches + the new matches
+			%	A new match is done when the remaining pixels in current are
+			% 	corresponded to an edge pixel in the binary map of the following scale.
+			next =max(next, imdilate(current,strElm).*binaryMaps(:,:,idxNextScale));
+			% Matched pixels are removed from current
+			% Any pixel in the scole of imdilate(next,strElm) had to be matched already.
+			current = current-imdilate(next,strElm);
+			% Pixels are eliminated from current so that they are not matched to further
+			%	pixels in the next scale, once they have already been matched to closer pixels.
+			thisDist=thisDist+1;
+		end
+		current=next;
 
     end
+	
+elseif(strcmp(mode,'RSTR'))
 
-    fx=zeros(size(im,1),size(im,2));
-    fy=zeros(size(im,1),size(im,2));
-    
-    if (nargout==1)
-        ft=max(abs(filtImages),[],3);
-    else
+	current=binaryMaps(:,:,1);
+	
+	for idxScale=2:size(binaryMaps,3)
+	
+		[posX,posY]=find(current==1);
 
-        [~,pos]=max(abs(filtImages),[],3);
+		for i=1:length(posX)
+
+			matches=0;
+			thisDist=0;
+			while(sum(matches(:))==0 && thisDist<=maxDist)
+				%This are the positions under consideration for the present dist.
+				%If some pixels are validated, no greater distances will be checked,
+				%	since pixels can only be matched to closest-possible counterparts
+				%	in the following scale binary map.
+				pXs=[max(0,posX(i)-thisDist):min(size(current,1),posX(i)+thisDist)];
+				pYs=[max(0,posY(i)-thisDist):min(size(current,2),posY(i)+thisDist)];
+				
+				binWindow=binaryMaps(pXs,pYs,idxNextScale);
+				angleWindow=orientationMaps(pXs,pYs,idxNextScale);
+				angleWindow= abs(angleWindow-orientationMaps(posX(i),posY(i),idxNextScale));
+				angleWindow= min(angleWindow,2*pi-angleWindow);
+
+				matches=and(binWindow==1,angleWindow<=angleT);
+			end
+				
+			%The matched pixels are included in the window "matches",
+			%	which is now used to validate the corresponding pixels
+			%	in the "next" map, which represents the pixels in the 
+			%	next scale that have been validated already.
+			if (sum(matches(:))>0)
+				fromX=posX(i)-(size(matches,1)-1)/2;
+				toX=fromX+size(matches,1)-1;
+				fromY=posY(i)-(size(matches,2)-1)/2;
+				toY=fromY+size(matches,1)-1;
+				next(fromX:toX,fromY:toY)=max(next(fromX:toX,fromY:toY),matches);
+			end
 
 
-        for idTheta=1:length(thetas)
-            theta=thetas(idTheta);
-            vals=filtImages(:,:,idTheta);
-            fx(pos==idTheta)=vals(pos==idTheta).*cos(theta);
-            fy(pos==idTheta)=vals(pos==idTheta).*sin(theta);
+		end
 
-        end
+		current=next;
+	end
 
-        ft=sqrt(fx.^2+fy.^2);
-    end
-    
-    
-    %Saving in the main structures
-    mcFX(:,:,idxChannel)=fx;
-    mcFY(:,:,idxChannel)=fy;
-    mcFT(:,:,idxChannel)=ft;
-    
-    
 end
 
 %
-%	3- Output Processing
+%	3- Output preparation
 %
+finalMap=current;
 
-if (nargout==1)
-    out1=mcFT;
-elseif(nargout==2)
-    out1=mcFX;
-    out2=mcFY;
-else
-    out1=mcFT;
-    out2=mcFX;
-    out3=mcFY;
-end
-    
-
-
-
-    
+   
 % [license]
 %
 % GNU GENERAL PUBLIC LICENSE
@@ -845,3 +856,4 @@ end
 % the library.  If this is what you want to do, use the GNU Lesser General
 % Public License instead of this License.  But first, please read
 % <http://www.gnu.org/philosophy/why-not-lgpl.html>.
+
