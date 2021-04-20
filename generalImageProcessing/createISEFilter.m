@@ -4,7 +4,7 @@ function filter = createISEFilter(order,pValue)
 %
 %  function [filter] = createISEFilter(order,pValue)
 %
-%   Produces an ISE filter of order 0 or 1 with a given p-value. This
+%   Produces an ISE filter of order 0, 1 or 2 with a given p-value. This
 %   filter is also known as Shen-Castan filter, due to the original authors
 %   of the proposal. The p value is used according to [1], while the 2D expansion 
 %   is made based on the Euclidean magnitude of the (x,y) deviation from the 
@@ -17,8 +17,8 @@ function filter = createISEFilter(order,pValue)
 %
 %
 % [Inputs]
-%   order(mandatory)- Can be expressed as an integer in {0,1,2}, or a
-%       string in {'0','0D','0d','1','1d','1D'}.
+%   order(mandatory)- Can be expressed as an integer in {1,2,3}, or a
+%       string in {'0','0D','0d','1','1d','1D','2','2D','2d'}.
 %   pValue(mandatory)- Exponent for the filter.
 %
 %
@@ -48,19 +48,18 @@ function filter = createISEFilter(order,pValue)
 
 %
 % Version control-
-%	2016/03 		Development started.
-%	2016/04	1.00 	Initial version
+%	2016.03 Development started.
 
 %
 %	0- Validate Arguments 
 %
 
-assert(nargin>1,'Error at createISEFilter.m>\t Too few arguments');
-assert(nargin<3,'Error at createISEFilter.m>\t Too many arguments');
-assert(pValue>0,sprintf('Error at createISEFilter.m>\t Negative pValue [%.2f] is not allowed',pValue));
+assert(nargin>1,'Error at createISEFilter: Too few arguments');
+assert(nargin<3,'Error at createISEFilter: Too many arguments');
+assert(pValue>0,sprintf('Error at createISEFilter: Negative pValue [%.2f] is not allowed',pValue));
 
 order=parseFilterOrder(order);
-filterSize=round(25*max(1,1/pValue));%Maybe too large, maybe not. DO NOT PUBLISH BEFORE THIS IS SOLVED!!! 
+filterSize=round(25*max(1,1/pValue));%Maybe too large, maybe not. 
 if (mod(filterSize,2)==0)
     filterSize=filterSize+1;
 end
