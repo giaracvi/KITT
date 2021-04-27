@@ -19,6 +19,6 @@ As long as some interdependences exist, we recommend users to download the whole
 
 **How to cite or reference the KITT?** If using the KITT, please cite it as
 
-	*KERMIT Research Unit (Ghent University), The Kermit Image Toolkit (KITT), B. De Baets, C. Lopez-Molina (Eds.), Available online at www.kermitimagetoolkit.net.*
-
+*	KERMIT Research Unit (Ghent University), The Kermit Image Toolkit (KITT), B. De Baets, C. Lopez-Molina (Eds.), Available online at https://github.com/giaracvi/KITT.
+	
 Additionally, please review the documentation at each of the files to find out the papers that should be cited regarding the authorship of the file.
