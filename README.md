@@ -94,7 +94,7 @@ Additionally, please review the documentation at each of the files to find out t
 
 	*	**venkateshRosinThresholding.m**: Thresholds a grayscale (also, fuzzy) edge image by evaluating the length and average intensity of each edge segment candidate, as presented by Venkatesh and Rosin (Graphical Models and Image Processing, 1995).
 
-## Publication
+## Publications
 
 
 *	**2018**
