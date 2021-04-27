@@ -115,7 +115,7 @@ Additionally, please review the documentation at each of the files to find out t
 
     *	**[LopezMolina17d]**– C. Lopez-Molina, J. Montero, H. Bustince and B. De Baets, “Gradient fusion operators for image processing”,  presented at the conference of the European Society for Fuzzy Logic and Technology (Eusflat), Warsaw (Poland), 2017. ([Link]())
 	
-    *	**[Madrid17a]**– N. Madrid and C. Lopez-Molina, “Scale-Space defined from Image Fuzzy Sharpening”, Presented at the conference of the International Fuzzy Set Association (IFSA), Otsu (Pref. Shiga, Japan),2017. ([Link]())
+    *	**[Madrid17a]**– N. Madrid and C. Lopez-Molina, “Scale-Space defined from Image Fuzzy Sharpening”, Presented at the conference of the International Fuzzy Set Association (IFSA), Otsu (Pref. Shiga, Japan), 2017. ([Link]())
 
 
 *	**2016**
