@@ -8,7 +8,7 @@ Feel free to use any of the code, or to build upon it.
 carlos lopez-molina (carlos.lopez@unavarra.es)
 
 
-##Main information
+## Main information
 
 **What is is, the KITT?** The Kermit Image ToolkiT (KITT) is a collection of code pieces in Matlab aimed at easing Image Processing tasks. The KITT is (as of today) distributed in four different packages, each of them containing different functions in Matlab. Some of these functions implement our own methods, while other embody well-known tasks in literature.
 
